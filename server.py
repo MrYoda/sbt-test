@@ -56,6 +56,12 @@ class MainHandler(tornado.web.RequestHandler):
         # filter available banners by positive available show count
         available_banners = [banner_url for banner_url in available_banners
                              if self.application.banner_shows[banner_url] > 0]
+
+        # check if last banner may be removed from available banners
+        last_banner = self.application.get_last_banner(self.request.remote_ip)
+        if last_banner and last_banner in available_banners:
+            if len(available_banners) > 1:  # remove last banner if available more than one
+                available_banners.remove(last_banner)
         return available_banners
 
     @staticmethod
@@ -73,13 +79,15 @@ class MainHandler(tornado.web.RequestHandler):
         self.write(html)
         # decrease banner shows
         self.application.banner_shows[banner_url] -= 1
+        # set last banner for current ip
+        self.application.set_last_banner(self.request.remote_ip, banner_url)
 
     @staticmethod
     def banner_wrapper(banner_url):
         """ Wraps banner into html for response
         """
         # so simple
-        return '<img src="{url}" alt="{alt}">'.format(
+        return '{url}<img src="{url}" alt="{alt}">'.format(
             url=banner_url,
             alt='Banner'
         )
@@ -102,6 +110,8 @@ class Application(tornado.web.Application):
         self.banner_categories = defaultdict(list)
         self.read_config()
 
+        self.last_banners = dict()  # dict {ip: banner_url}
+
     def read_config(self):
         """ Reads config from CSV and stores in data structures
         """
@@ -115,6 +125,16 @@ class Application(tornado.web.Application):
                 for category in categories:
                     self.banner_categories[category].append(url)
                 self.banner_shows[url] = shows
+
+    def get_last_banner(self, ip):
+        """ Return last showed banner by IP
+        """
+        return self.last_banners.get(ip)
+
+    def set_last_banner(self, ip, banner_url):
+        """ Set last showed banner by IP
+        """
+        self.last_banners[ip] = banner_url
 
 
 def parse_args():
